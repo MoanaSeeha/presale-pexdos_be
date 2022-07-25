@@ -1,14 +1,36 @@
-/**
- *Submitted for verification at BscScan.com on 2022-07-04
- */
-
-/**
- *Submitted for verification at BscScan.com on 2022-06-29
- */
-
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 
 pragma solidity >=0.7.0 <0.9.0;
+
+interface AggregatorV3Interface {
+  function decimals() external view returns (uint8);
+
+  function description() external view returns (string memory);
+
+  function version() external view returns (uint256);
+
+  function getRoundData(uint80 _roundId)
+    external
+    view
+    returns (
+      uint80 roundId,
+      int256 answer,
+      uint256 startedAt,
+      uint256 updatedAt,
+      uint80 answeredInRound
+    );
+
+  function latestRoundData()
+    external
+    view
+    returns (
+      uint80 roundId,
+      int256 answer,
+      uint256 startedAt,
+      uint256 updatedAt,
+      uint80 answeredInRound
+    );
+}
 
 /**
  * @dev Provides information about the current execution context, including the
@@ -246,36 +268,28 @@ contract Presale is Ownable, ReentrancyGuard {
     mapping(uint256 => uint256) public bonusPerStage; // in percentage : 1 : seed 2 : private 3 : public
     mapping(uint256 => uint256) public maxCapPerStage;
     mapping(uint256 => uint256) public soldAmountPerStage;
+    AggregatorV3Interface internal priceFeed;
     address public tokenAddress = 0xD2c0c5E1855aEa5bd9c63C27bd802434509B99b5;
     uint256 public period = 30 days;
     uint256 public startDate;
+    uint8 public current_stage = 1;
 
-    fallback() external payable {
-        buyWithBNB(msg.sender, msg.value);
-    }
+    // fallback() external payable {
+    //     buyWithBNB(msg.sender, msg.value);
+    // }
 
     constructor() {
-        pricePerStage[1] = 10**16;
-        pricePerStage[2] = 163 * 10**14;
-        pricePerStage[3] = 20 * 10**15;
+        pricePerStage[1] = 4;
+        pricePerStage[2] = 8;
+        pricePerStage[3] = 15;
 
-        maxCapPerStage[1] = 60000000*10**18;
-        maxCapPerStage[2] = 60000000*10**18;
-        maxCapPerStage[3] = 58000000*10**18;
+        maxCapPerStage[1] = 70000000*10**18;
+        maxCapPerStage[2] = 10000000*10**18;
+        maxCapPerStage[3] = 100000000*10**18;
 
-        bonusPerStage[1] = 20;
-        bonusPerStage[2] = 10;
-        bonusPerStage[3] = 5;
-    }
-
-
-
-    function getCurrentStage() public view returns (uint256) {
-        if (block.timestamp < startDate) return 0; // not stated yet
-        if (block.timestamp < startDate + period) return 1; // seed sale
-        if (block.timestamp < startDate + period * 2) return 2; // private sale
-        if (block.timestamp < startDate + period * 3) return 3; // public sale
-        return 4; // sale ended
+        // bonusPerStage[1] = 20;
+        // bonusPerStage[2] = 10;
+        // bonusPerStage[3] = 5;
     }
 
     function setPeriod(uint256 _period) external onlyOwner {
@@ -286,32 +300,62 @@ contract Presale is Ownable, ReentrancyGuard {
         startDate = block.timestamp;
     }
 
-    function buyWithBNB(address toAddr, uint256 bnbAmount) internal {
-    	uint256 cur_stage = getCurrentStage();
-    	require(cur_stage != 0, "sale not started");
-    	require(cur_stage != 4, "sale ended");
-    	uint256 sendAmount = bnbAmount * 10 ** 18 / pricePerStage[cur_stage];
+    // function buyWithBNB(address toAddr, uint256 bnbAmount) internal {
+    // 	// require(cur_stage != 0, "sale not started");
+    // 	require(current_stage != 4, "sale ended");
+    // 	uint256 sendAmount = bnbAmount * 10 ** 18 / pricePerStage[current_stage];
 
-    	IERC20(tokenAddress).transfer(msg.sender, sendAmount);
-    	soldAmountPerStage[cur_stage] += sendAmount;
+    // 	IERC20(tokenAddress).transfer(msg.sender, sendAmount);
+    // 	soldAmountPerStage[current_stage] += sendAmount;
+    // }
+
+    function getLastPrice() internal returns (int) {
+         /**
+        * Network: BSC Testnet
+        * Aggregator: BNB/USD
+        * Address: 0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526
+        
+        * Network: BSC mainnet
+        * Aggregator: BNB/USD
+        * Address: 0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE
+        */
+        priceFeed = AggregatorV3Interface(0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526);
+        (
+            /*uint80 roundID*/,
+            int price,
+            /*uint startedAt*/,
+            /*uint timeStamp*/,
+            /*uint80 answeredInRound*/
+        ) = priceFeed.latestRoundData();
+        return price / 10**9;//decimal: test-9, main-8
     }
 
     function buyToken(uint256 buyAmount) external payable nonReentrant {
-        uint256 cur_stage = getCurrentStage();
-        uint256 sendAmount = buyAmount*(100 + bonusPerStage[cur_stage])/100;
-        require(cur_stage != 0, "sale not started");
-        require(cur_stage != 4, "sale ended");
-        require(
-            msg.value ==
-                (buyAmount * pricePerStage[cur_stage]) / 10**18,
-            "you should send exact bnb"
-        );
-        require(
-             sendAmount + soldAmountPerStage[cur_stage] <= maxCapPerStage[cur_stage],
-            "it already hitted max cap"
-        );
-        IERC20(tokenAddress).transfer(msg.sender, sendAmount);
-        soldAmountPerStage[cur_stage] += sendAmount;
+        // uint256 sendAmount = buyAmount*(100 + bonusPerStage[cur_stage])/100;
+        uint256 bnbPriceShouldReceive;
+        uint256 lastPrice = uint256(getLastPrice());
+        require(current_stage != 4, "sale ended");
+        if(buyAmount + soldAmountPerStage[current_stage] > maxCapPerStage[current_stage]) {
+            require(current_stage + 1 != 4, "sale ended");
+            bnbPriceShouldReceive = (((maxCapPerStage[current_stage] - soldAmountPerStage[current_stage]) * pricePerStage[current_stage]) + ((buyAmount + soldAmountPerStage[current_stage] - maxCapPerStage[current_stage]) * pricePerStage[current_stage + 1])) / (lastPrice * 10 ** 15);
+            require(
+                msg.value > bnbPriceShouldReceive,
+                "you should send exact bnb"
+            );
+            
+            soldAmountPerStage[current_stage+1] += (buyAmount + soldAmountPerStage[current_stage] - maxCapPerStage[current_stage]);
+            soldAmountPerStage[current_stage] = maxCapPerStage[current_stage];
+            current_stage++;
+        }
+        else {
+            require(
+                msg.value > (buyAmount * (pricePerStage[current_stage] / (lastPrice * 10 ** 15))),
+                "you should send exact bnb"
+            );
+            soldAmountPerStage[current_stage] += buyAmount;
+        }
+        IERC20(tokenAddress).transfer(msg.sender, buyAmount);
+        
     }
 
     function withdraw() external onlyOwner {
