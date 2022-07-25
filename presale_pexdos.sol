@@ -279,9 +279,9 @@ contract Presale is Ownable, ReentrancyGuard {
     // }
 
     constructor() {
-        pricePerStage[1] = 4;
-        pricePerStage[2] = 8;
-        pricePerStage[3] = 15;
+        pricePerStage[1] = 4 * 10 ** 15;//0.004$
+        pricePerStage[2] = 8 * 10 ** 15;
+        pricePerStage[3] = 15 * 10 ** 15;
 
         maxCapPerStage[1] = 70000000*10**18;
         maxCapPerStage[2] = 10000000*10**18;
@@ -309,7 +309,7 @@ contract Presale is Ownable, ReentrancyGuard {
     // 	soldAmountPerStage[current_stage] += sendAmount;
     // }
 
-    function getLastPrice() internal returns (int) {
+    function getLastPrice() public returns (uint256) {
          /**
         * Network: BSC Testnet
         * Aggregator: BNB/USD
@@ -327,29 +327,33 @@ contract Presale is Ownable, ReentrancyGuard {
             /*uint timeStamp*/,
             /*uint80 answeredInRound*/
         ) = priceFeed.latestRoundData();
-        return price / 10**9;//decimal: test-9, main-8
+        return uint256(price);//decimal: test-9, main-8
     }
 
     function buyToken(uint256 buyAmount) external payable nonReentrant {
         // uint256 sendAmount = buyAmount*(100 + bonusPerStage[cur_stage])/100;
         uint256 bnbPriceShouldReceive;
-        uint256 lastPrice = uint256(getLastPrice());
+        uint256 lastPrice = getLastPrice();
         require(current_stage != 4, "sale ended");
         if(buyAmount + soldAmountPerStage[current_stage] > maxCapPerStage[current_stage]) {
             require(current_stage + 1 != 4, "sale ended");
-            bnbPriceShouldReceive = (((maxCapPerStage[current_stage] - soldAmountPerStage[current_stage]) * pricePerStage[current_stage]) + ((buyAmount + soldAmountPerStage[current_stage] - maxCapPerStage[current_stage]) * pricePerStage[current_stage + 1])) / (lastPrice * 10 ** 15);
+            uint prevAmount = maxCapPerStage[current_stage] - soldAmountPerStage[current_stage];
+            uint prevStagePrice = ((prevAmount * pricePerStage[current_stage]) / lastPrice) / (10**9);
+            uint afterAmount = buyAmount + soldAmountPerStage[current_stage] - maxCapPerStage[current_stage];
+            uint afterStagePrice = ((afterAmount * pricePerStage[current_stage+1]) / lastPrice) / (10**9);
+            bnbPriceShouldReceive = prevStagePrice + afterStagePrice;
             require(
                 msg.value > bnbPriceShouldReceive,
                 "you should send exact bnb"
             );
             
-            soldAmountPerStage[current_stage+1] += (buyAmount + soldAmountPerStage[current_stage] - maxCapPerStage[current_stage]);
+            soldAmountPerStage[current_stage+1] += afterAmount;
             soldAmountPerStage[current_stage] = maxCapPerStage[current_stage];
             current_stage++;
         }
         else {
             require(
-                msg.value > (buyAmount * (pricePerStage[current_stage] / (lastPrice * 10 ** 15))),
+                msg.value > ((buyAmount * pricePerStage[current_stage]) / lastPrice) / (10 ** 9),
                 "you should send exact bnb"
             );
             soldAmountPerStage[current_stage] += buyAmount;
