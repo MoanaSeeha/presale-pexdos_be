@@ -343,7 +343,7 @@ contract Presale is Ownable, ReentrancyGuard {
             uint afterStagePrice = ((afterAmount * pricePerStage[current_stage+1]) / lastPrice) / (10**9);
             bnbPriceShouldReceive = prevStagePrice + afterStagePrice;
             require(
-                msg.value > bnbPriceShouldReceive,
+                msg.value >= bnbPriceShouldReceive,
                 "you should send exact bnb"
             );
             
@@ -353,7 +353,7 @@ contract Presale is Ownable, ReentrancyGuard {
         }
         else {
             require(
-                msg.value > ((buyAmount * pricePerStage[current_stage]) / lastPrice) / (10 ** 9),
+                msg.value >= ((buyAmount * pricePerStage[current_stage]) / lastPrice) / (10 ** 9),
                 "you should send exact bnb"
             );
             soldAmountPerStage[current_stage] += buyAmount;
